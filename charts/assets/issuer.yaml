@@ -1,0 +1,16 @@
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: azure-issuer
+spec:
+  acme:
+    email: $LETSENCRYPT_EMAIL
+    server: https://acme-v02.api.letsencrypt.org/directory
+    privateKeySecretRef:
+      name: issuer-account-key
+    solvers:
+      - dns01:
+          azureDNS:
+            subscriptionID: $AZURE_SUBSCRIPTION_ID
+            resourceGroupName: $RESOURCE_GROUP
+            hostedZoneName: $DOMAIN
