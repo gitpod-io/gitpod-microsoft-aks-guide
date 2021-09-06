@@ -23,8 +23,8 @@ The whole process takes around twenty minutes. In the end, the following resourc
 
 - an AKS cluster running Kubernetes v1.20.
 - Azure load balancer.
-- ~~Azure MySQL database.~~ MySQL will be provided by Helm under [#5508](https://github.com/gitpod-io/gitpod/issues/5508) solved
-- ~~Azure Blob Storage.~~ Minio will be used until [Azure storage gateway](https://github.com/gitpod-io/gitpod-azure-aks-guide/issues/1) is configured
+- ~~Azure MySQL database.~~ MySQL will be provided by Helm until [#5508](https://github.com/gitpod-io/gitpod/issues/5508) solved.
+- Azure Blob Storage.
 - Azure DNS zone.
 - Azure container registry.
 - [calico](https://docs.projectcalico.org) as CNI and NetworkPolicy implementation.

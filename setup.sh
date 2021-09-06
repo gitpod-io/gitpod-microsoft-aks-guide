@@ -214,6 +214,8 @@ EOF
   kubectl apply -f gitpod-certificate.yaml
   rm gitpod-certificate.yaml
 
+  kubectl rollout restart deployment/server
+
   echo "Gitpod successfully installed to ${DOMAIN}..."
 }
 
@@ -390,28 +392,36 @@ function setup_mysql_database() {
 }
 
 function setup_storage() {
-#  @todo use Minio as Azure facade https://docs.min.io/docs/minio-gateway-for-azure.html
-#
-#  if [ "$(az storage account show --name ${STORAGE_ACCOUNT_NAME} --resource-group ${RESOURCE_GROUP} --query "name == '${STORAGE_ACCOUNT_NAME}'" || echo "empty")" == "true" ]; then
-#    echo "Storage account exists..."
-#  else
-#    echo "Create storage account..."
-#    az storage account create \
-#      --access-tier Hot \
-#      --kind StorageV2 \
-#      --name "${STORAGE_ACCOUNT_NAME}" \
-#      --resource-group "${RESOURCE_GROUP}" \
-#      --sku Standard_LRS
-#  fi
+  if [ "$(az storage account show --name ${STORAGE_ACCOUNT_NAME} --resource-group ${RESOURCE_GROUP} --query "name == '${STORAGE_ACCOUNT_NAME}'" || echo "empty")" == "true" ]; then
+    echo "Storage account exists..."
+  else
+    echo "Create storage account..."
+    az storage account create \
+      --access-tier Hot \
+      --kind StorageV2 \
+      --name "${1}" \
+      --resource-group "${RESOURCE_GROUP}" \
+      --sku Standard_LRS
+  fi
 
-  export MINIO_ACCESS_KEY=$(openssl rand -base64 20)
-  export MINIO_SECRET_KEY=$(openssl rand -base64 20)
+  PRINCIPAL_ID=$(az aks show --name "${CLUSTER_NAME}" --resource-group "${RESOURCE_GROUP}" --query "identityProfile.kubeletidentity.objectId" -o tsv)
+  STORAGE_ACCOUNT_ID=$(az storage account show \
+    --name "${STORAGE_ACCOUNT_NAME}" \
+    --output tsv \
+    --query id \
+    --resource-group "${RESOURCE_GROUP}" )
 
-#  export STORAGE_ACCOUNT_KEY=$(az storage account keys list \
-#      --account-name "${STORAGE_ACCOUNT_NAME}" \
-#      --resource-group "${RESOURCE_GROUP}" \
-#      --output json \
-#        | jq -r '.[] | select(.keyName == "key1") | .value')
+  echo "Allow Kubernetes managed identity to access the storage account..."
+  az role assignment create \
+    --assignee "${PRINCIPAL_ID}" \
+    --role "Storage Blob Data Contributor" \
+    --scope "${STORAGE_ACCOUNT_ID}"
+
+  export STORAGE_ACCOUNT_KEY=$(az storage account keys list \
+      --account-name "${STORAGE_ACCOUNT_NAME}" \
+      --resource-group "${RESOURCE_GROUP}" \
+      --output json \
+        | jq -r '.[] | select(.keyName == "key1") | .value')
 }
 
 function uninstall() {

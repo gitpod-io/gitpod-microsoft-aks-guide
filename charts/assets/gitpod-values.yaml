@@ -5,8 +5,6 @@
 # - MYSQL_GITPOD_PASSWORD
 # - MYSQL_INSTANCE_NAME
 # - LOCATION
-# - MINIO_ACCESS_KEY
-# - MINIO_SECRET_KEY
 
 hostname: $DOMAIN
 
@@ -68,8 +66,16 @@ mysql:
 # Azure blob storage isn't S3 compatible
 minio:
   enabled: true
-  accessKey: $MINIO_ACCESS_KEY
-  secretKey: $MINIO_SECRET_KEY
+  accessKey: $STORAGE_ACCOUNT_NAME
+  secretKey: $STORAGE_ACCOUNT_KEY
+  fullnameOverride: minio
+  azuregateway:
+    enabled: true
+  persistence:
+    enabled: false
+  serviceAccount:
+    create: true
+    name: minio
 
 docker-registry:
   enabled: false
