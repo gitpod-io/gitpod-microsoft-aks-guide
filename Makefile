@@ -3,7 +3,7 @@
 # set default shell
 SHELL=/bin/bash -o pipefail -o errexit
 
-IMG=ghcr.io/gitpod-io/gitpod-azure-aks-guide:latest
+IMG=ghcr.io/gitpod-io/gitpod-microsoft-aks-guide:latest
 
 build: ## Build docker image containing the required tools for the installation
 	@docker build --quiet . -t ${IMG}
