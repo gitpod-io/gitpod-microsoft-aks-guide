@@ -399,7 +399,7 @@ function setup_storage() {
     az storage account create \
       --access-tier Hot \
       --kind StorageV2 \
-      --name "${1}" \
+      --name "${STORAGE_ACCOUNT_NAME}" \
       --resource-group "${RESOURCE_GROUP}" \
       --sku Standard_LRS
   fi
