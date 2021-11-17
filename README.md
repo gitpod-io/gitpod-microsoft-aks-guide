@@ -4,14 +4,19 @@ Before starting the installation process, you need:
 
 - An Azure account
   - [Create one now by clicking here](https://azure.microsoft.com/en-gb/free/)
-- Azure [service principal](https://docs.microsoft.com/en-us/azure/active-directory/develop/howto-create-service-principal-portal). This needs to have "Owner" IAM rights on the subscription and set up with "Group Administrator" ActiveDirectory role
-  - Log into [portal.azure.com](https://portal.azure.com/) and navigate to [Azure Active Directory](https://portal.azure.com/?quickstart=True#blade/Microsoft_AAD_IAM/ActiveDirectoryMenuBlade/Overview).
-  - Select the [Roles and Administrators](https://portal.azure.com/?quickstart=True#blade/Microsoft_AAD_IAM/ActiveDirectoryMenuBlade/RolesAndAdministrators)
-  - Select the role Groups Administrator
-  - Select "Add assignments" and add your service principal
+- A user account with "Owner" IAM rights on the subscription
 - A `.env` file with basic details about the environment.
   - We provide an example of such file [here](.env.example).
 - [Docker](https://docs.docker.com/engine/install/) installed on your machine, or better, a Gitpod workspace :)
+
+## Azure authentication
+
+For simplicity, this guide does **not** use an Azure [service principal](https://docs.microsoft.com/en-us/azure/active-directory/develop/howto-create-service-principal-portal).
+Authentication is done via an interactive URL, similar to this:
+
+```shell
+To sign in, use a web browser to open the page https://microsoft.com/devicelogin and enter the code ABC123DEF to authenticate.
+```
 
 **To start the installation, execute:**
 
@@ -23,13 +28,13 @@ The whole process takes around twenty minutes. In the end, the following resourc
 
 - an AKS cluster running Kubernetes v1.21.
 - Azure load balancer.
-- ~~Azure MySQL database.~~ MySQL will be provided by Helm until [#5508](https://github.com/gitpod-io/gitpod/issues/5508) solved.
+- Azure MySQL database.
 - Azure Blob Storage.
 - Azure DNS zone.
 - Azure container registry.
 - [calico](https://docs.projectcalico.org) as CNI and NetworkPolicy implementation.
 - [cert-manager](https://cert-manager.io/) for self-signed SSL certificates.
-- [Jaeger operator](https://github.com/jaegertracing/helm-charts/tree/main/charts/jaeger-operator) - and Jaeger deployment for gitpod distributed tracing.
+- [Jaeger operator](https://github.com/jaegertracing/helm-charts/tree/main/charts/jaeger-operator) - and Jaeger deployment for Gitpod distributed tracing.
 - [gitpod.io](https://github.com/gitpod-io/gitpod) deployment.
 
 ### Common errors running make install
@@ -41,34 +46,62 @@ The whole process takes around twenty minutes. In the end, the following resourc
 
   *After increasing the quota, retry the installation running `make install`*
 
+- Some pods never start (`Init` state)
+
+  ```shell
+  kubectl get pods -l component=proxy
+  NAME                     READY   STATUS    RESTARTS   AGE
+  proxy-5998488f4c-t8vkh   0/1     Init 0/1  0          5m
+  ```
+
+  The most likely reason is because the [DNS01 challenge](https://cert-manager.io/docs/configuration/acme/dns01/) has yet to resolve. If using `SETUP_MANAGED_DNS`, you will need to update your DNS records to point to the Azure DNS zone nameserver.
+
+  Once the DNS record has been updated, you will need to delete all Cert Manager pods to retrigger the certificate request
+
+  ```shell
+  kubectl delete pods -n cert-manager --all
+  ```
+
+  After a few minutes, you should see the `https-certificate` become ready.
+
+  ```shell
+  kubectl get certificate
+  NAME                        READY   SECRET                      AGE
+  https-certificates          True    https-certificates          5m
+  ```
+
 ## Verify the installation
 
 First, check that Gitpod components are running.
 
 ```shell
 kubectl get pods
-NAME                                 READY   STATUS    RESTARTS   AGE
-blobserve-5584456c68-t2vf6           2/2     Running   0          7m40s
-content-service-69fbcdf9fc-ngq9n     1/1     Running   0          7m39s
-dashboard-86877b7779-8rtdj           1/1     Running   0          7m40s
-image-builder-6557d4b5cf-xl9xf       3/3     Running   0          7m39s
-jaeger-5dfd44f668-8tj9x              1/1     Running   0          7m46s
-messagebus-0                         1/1     Running   0          7m40s
-minio-76f8b45fb7-brr96               1/1     Running   0          7m40s
-mysql-0                              1/1     Running   0          7m40s
-proxy-69d87469f9-fdx9l               1/1     Running   0          7m40s
-proxy-69d87469f9-qsmwg               1/1     Running   0          7m40s
-registry-facade-5xlhh                2/2     Running   0          7m39s
-registry-facade-qzmft                2/2     Running   0          7m39s
-registry-facade-vk9q4                2/2     Running   0          7m39s
-server-6bfdcbfd5b-2kwbt              2/2     Running   0          7m39s
-ws-daemon-7fqd5                      2/2     Running   0          7m39s
-ws-daemon-jl46t                      2/2     Running   0          7m39s
-ws-daemon-q9k9l                      2/2     Running   0          7m39s
-ws-manager-66f6b48c8-ts286           2/2     Running   0          7m40s
-ws-manager-bridge-5dfb558c96-kcxvr   1/1     Running   0          7m40s
-ws-proxy-979dd587b-ghjf4             1/1     Running   0          7m39s
-ws-proxy-979dd587b-mtkxt             1/1     Running   0          7m39s
+NAME                                      READY   STATUS    RESTARTS   AGE
+agent-smith-c9v58                         2/2     Running   0          7m35s
+agent-smith-j7b85                         2/2     Running   0          7m35s
+agent-smith-mwf5d                         2/2     Running   0          7m35s
+blobserve-84f895c88c-476m2                2/2     Running   0          7m33s
+content-service-57c7fdb84d-dl49k          1/1     Running   0          7m34s
+dashboard-b79d84d47-z7hzg                 1/1     Running   0          7m34s
+image-builder-mk3-5ff7c68bb4-qqbw5        2/2     Running   0          7m34s
+jaeger-operator-777d987c8b-ts9gw          1/1     Running   0          7m33s
+messagebus-0                              1/1     Running   0          7m34s
+minio-697975c744-swwp6                    1/1     Running   0          7m34s
+minio-697975c744-tj96r                    1/1     Running   0          7m34s
+openvsx-proxy-0                           1/1     Running   0          7m34s
+proxy-c58846cf5-cbdgb                     2/2     Running   0          7m33s
+registry-facade-84sgf                     2/2     Running   0          7m34s
+registry-facade-n6kc9                     2/2     Running   0          7m35s
+registry-facade-zt7qt                     2/2     Running   0          7m34s
+server-689b886647-dkd5h                   2/2     Running   0          7m34s
+ws-48fe6d74-6e6d-4e3e-a6a4-1bf160b4ed3d   1/1     Running   0          2m43s
+ws-daemon-v8284                           2/2     Running   0          7m35s
+ws-daemon-vs59b                           2/2     Running   0          7m35s
+ws-daemon-w6gmj                           2/2     Running   0          7m35s
+ws-manager-54c8f9995f-lrrkx               1/1     Running   0          7m34s
+ws-manager-bridge-8648cd6b69-nqxnh        2/2     Running   0          7m34s
+ws-proxy-574f9dcbcc-qrn5m                 1/1     Running   0          7m33s
+ws-scheduler-84d99cbbbb-5p86k             2/2     Running   0          7m34s
 ```
 
 ### Test Gitpod workspaces
@@ -84,18 +117,6 @@ It should display the Gitpod login page similar to the next image.
 ![Gitpod login page](./images/gitpod-login.png "Gitpod Login Page")
 
 ----
-
-## Update Gitpod auth providers
-
-Please check the [OAuth providers integration documentation](https://www.gitpod.io/docs/self-hosted/0.5.0/install/oauth) expected format.
-
-We provide an [example here](./auth-providers-patch.yaml). Fill it with your OAuth providers data.
-
-```console
-make auth
-```
-
-> We are aware of the limitation of this approach, and we are working to improve the Helm chart to avoid this step.
 
 ## Destroy the cluster and Azure resources
 
