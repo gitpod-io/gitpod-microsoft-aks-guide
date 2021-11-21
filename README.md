@@ -21,7 +21,7 @@ make install
 
 The whole process takes around twenty minutes. In the end, the following resources are created:
 
-- an AKS cluster running Kubernetes v1.20.
+- an AKS cluster running Kubernetes v1.21.
 - Azure load balancer.
 - ~~Azure MySQL database.~~ MySQL will be provided by Helm until [#5508](https://github.com/gitpod-io/gitpod/issues/5508) solved.
 - Azure Blob Storage.
@@ -46,7 +46,7 @@ The whole process takes around twenty minutes. In the end, the following resourc
 First, check that Gitpod components are running.
 
 ```shell
-kubectl get pods 
+kubectl get pods
 NAME                                 READY   STATUS    RESTARTS   AGE
 blobserve-5584456c68-t2vf6           2/2     Running   0          7m40s
 content-service-69fbcdf9fc-ngq9n     1/1     Running   0          7m39s
