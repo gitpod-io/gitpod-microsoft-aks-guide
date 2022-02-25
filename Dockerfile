@@ -4,7 +4,7 @@ RUN apk add --no-cache \
   gettext \
   jq
 
-ARG GITPOD_VERSION="2022.01.1"
+ARG GITPOD_VERSION="2022.02.0"
 ARG HELM_VERSION=v3.6.3
 
 RUN curl -fsSL "https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl" -o /usr/local/bin/kubectl \
