@@ -443,13 +443,30 @@ function uninstall() {
     login
     setup_kubectl
 
-    helm uninstall gitpod
+    if notexist=$(kubectl get secret "gitpod-image-pull-secret"); then
+      echo "gitpod-image-pull-secret not exists..."
+    else
+      echo "delete gitpod-image-pull-secret"
+      kubectl delete secret gitpod-image-pull-secret
+    fi
 
-    kubectl delete secret gitpod-image-pull-secret
-    kubectl delete secret image-builder-registry-secret
-
+    if notexist=$(kubectl get secret "image-builder-registry-secret"); then
+      echo "image-builder-registry-secret not exists..."
+    else
+      echo "delete image-builder-registry-secret"
+      kubectl delete secret image-builder-registry-secret
+    fi
+    
     # Ensure we remove the load balancer
-    kubectl delete service proxy
+    if notexist=$(kubectl get service "proxy"); then
+      echo "proxy not exists..."
+    else
+      echo "delete proxy"
+      kubectl delete service proxy
+    fi
+    
+    # Delete Gitpod resources from config.yaml
+    kubectl delete -f gitpod.yaml
 
     echo "Deleting Kubernetes cluster..."
     az aks delete \
