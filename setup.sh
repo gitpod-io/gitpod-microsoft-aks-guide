@@ -354,7 +354,7 @@ function setup_mysql_database() {
       --auto-grow Enabled \
       --location "${LOCATION}" \
       --name "${MYSQL_INSTANCE_NAME}" \
-      --public Enabled \
+      --public Disabled \
       --resource-group "${RESOURCE_GROUP}" \
       --sku-name GP_Gen5_2 \
       --ssl-enforcement Disabled \
@@ -373,13 +373,61 @@ function setup_mysql_database() {
       --server-name "${MYSQL_INSTANCE_NAME}"
   fi
 
-  echo "Allow Azure resources to access MySQL database..."
-  az mysql server firewall-rule create \
-    --end-ip-address "0.0.0.0" \
-    --name "Azure_Resources" \
-    --resource-group "${RESOURCE_GROUP}" \
-    --server-name "${MYSQL_INSTANCE_NAME}" \
-    --start-ip-address "0.0.0.0"
+  MANAGED_RG="MC_${RESOURCE_GROUP}_${CLUSTER_NAME}_${LOCATION}"
+  DEFAULT_VNET_NAME=$(az resource list -g ${MANAGED_RG} --namespace "Microsoft.Network" --resource-type "virtualNetworks" | jq -r '.[].name')
+  DEFAULT_VNET_SUBNET=$(az network vnet subnet list -g ${MANAGED_RG} --vnet-name ${DEFAULT_VNET_NAME} | jq -r '.[].name')
+
+  # @link: https://docs.microsoft.com/en-us/azure/mysql/concepts-data-access-security-private-link
+  # create private endpoint for mysql server to connect. 
+  echo "Create Private Endpoint for Mysql Server"
+  if [ "$(az network private-endpoint show --resource-group ${RESOURCE_GROUP} --name private-endpoint --query "name == 'private-endpoint'" || echo "empty")" == "true" ]; then
+      echo "Private Endpoint exists..."
+  else
+      echo "Query Mysql Id"
+      export MYSQL_RESOURCE_ID=$(az mysql server show --resource-group ${RESOURCE_GROUP}  --name ${MYSQL_INSTANCE_NAME} --query id --output tsv)
+      echo "${MYSQL_RESOURCE_ID}"
+  
+      echo "Create Private Endpoint for Mysql Server Now..."
+      az network private-endpoint create -g ${RESOURCE_GROUP} -n private-endpoint --vnet-name "${DEFAULT_VNET_NAME}" \
+         --subnet "${DEFAULT_VNET_SUBNET}" \
+         --private-connection-resource-id "${MYSQL_RESOURCE_ID}" \
+         --connection-name private-endpoint \
+         --group-id "mysqlServer" \
+         -l ${LOCATION}
+  fi
+  
+  echo "Create Private DNS Zone for Private Endpoint"
+  if [ "$(az network private-dns zone show --resource-group ${RESOURCE_GROUP} --name mysql.database.azure.com --query "name == 'mysql.database.azure.com'" || echo "empty")" == "true" ]; then
+      echo "Private DNS Zone exists..."
+  else
+     az network private-dns zone create \
+         --resource-group ${RESOURCE_GROUP} \
+         --name "mysql.database.azure.com"
+  fi
+  
+  echo "Create Private DNS link"
+  if [ "$(az network private-dns link vnet show --resource-group ${RESOURCE_GROUP} --zone-name mysql.database.azure.com --name mysqllink --query "name == 'mysqllink'" || echo "empty")" == "true" ]; then
+      echo "Private DNS link exists..."
+  else
+      az network private-dns link vnet create \
+          --resource-group ${RESOURCE_GROUP}\
+          --zone-name "mysql.database.azure.com" \
+          --name "mysqllink" \
+          --virtual-network "${DEFAULT_VNET_NAME}" \
+          --registration-enabled false
+  fi
+  
+  echo "Create Private DNS Zone Group"
+  if [ "$(az network private-endpoint dns-zone-group show --endpoint-name private-endpoint --resource-group ${RESOURCE_GROUP} --name sqlzonegroup --query "name == 'sqlzonegroup'" || echo "empty")" == "true" ]; then
+      echo "Private DNS Zone Group exists..."
+  else
+      az network private-endpoint dns-zone-group create \
+         --resource-group ${RESOURCE_GROUP} \
+         --endpoint-name "private-endpoint" \
+         --name "sqlzonegroup" \
+         --private-dns-zone "mysql.database.azure.com" \
+         --zone-name sql
+  fi
 
   echo "Create database secret..."
   kubectl create secret generic "${SECRET_DATABASE}" \
