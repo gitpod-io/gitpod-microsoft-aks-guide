@@ -1,5 +1,9 @@
 # Running Gitpod in [Azure AKS](https://azure.microsoft.com/en-gb/services/kubernetes-service/)
 
+> **IMPORTANT** This guide exists as a simple and reliable way of creating a Gitpod instance in Azure AKS. It
+> is not designed to cater for every situation. If you find that it does not meet your exact needs,
+> please fork this guide and amend it to your own needs.
+
 Before starting the installation process, you need:
 
 - An Azure account
