@@ -6,7 +6,7 @@ SHELL=/bin/bash -o pipefail -o errexit
 IMG=ghcr.io/gitpod-io/gitpod-microsoft-aks-guide:latest
 
 build: ## Build docker image containing the required tools for the installation
-	@docker build --quiet . -t ${IMG}
+	@docker build . -t ${IMG}
 
 DOCKER_RUN_CMD = docker run -it --rm \
 	--volume $$HOME/.kube:/root/.kube \

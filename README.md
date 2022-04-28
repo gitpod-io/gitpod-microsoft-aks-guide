@@ -38,8 +38,10 @@ The whole process takes around twenty minutes. In the end, the following resourc
 - Azure container registry.
 - [calico](https://docs.projectcalico.org) as CNI and NetworkPolicy implementation.
 - [cert-manager](https://cert-manager.io/) for self-signed SSL certificates.
-- [Jaeger operator](https://github.com/jaegertracing/helm-charts/tree/main/charts/jaeger-operator) - and Jaeger deployment for Gitpod distributed tracing.
-- [gitpod.io](https://github.com/gitpod-io/gitpod) deployment.
+
+Upon completion, it will print the config for resource (including passwords) and instructions on what 
+to do next. **IMPORTANT** - running the `make install` command after the initial install will change 
+your database password which will require you to update your KOTS configuration.
 
 ## DNS records
 
@@ -78,7 +80,7 @@ Once applied, please allow a few minutes to for DNS propagation.
 
   The most likely reason is because the [DNS01 challenge](https://cert-manager.io/docs/configuration/acme/dns01/) has yet to resolve. If using `SETUP_MANAGED_DNS`, you will need to update your DNS records to point to the Azure DNS zone nameserver.
 
-  Once the DNS record has been updated, you will need to delete all Cert Manager pods to retrigger the certificate request
+  Once the DNS record has been updated, you will need to delete all cert-manager pods to retrigger the certificate request
 
   ```shell
   kubectl delete pods -n cert-manager --all
