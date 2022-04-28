@@ -16,14 +16,7 @@ set -a
 SERVICES_POOL="services"
 WORKSPACES_POOL="workspaces"
 
-K8S_NODE_VM_SIZE=${K8S_NODE_VM_SIZE:="Standard_DS3_v2"}
-CERT_NAME="https-certificates"
-MYSQL_GITPOD_ENCRYPTION_KEY='[{"name":"general","version":1,"primary":true,"material":"4uGh1q8y2DYryJwrVMHs0kWXJlqvHWWt/KJuNi04edI="}]'
-
-# Secrets
-SECRET_DATABASE="az-sql-token"
-SECRET_REGISTRY="az-registry-token"
-SECRET_STORAGE="az-storage-token"
+K8S_NODE_VM_SIZE=${K8S_NODE_VM_SIZE:="Standard_D4_v3"}
 
 function check_prerequisites() {
     if [ -z "${AZURE_SUBSCRIPTION_ID}" ]; then
@@ -63,8 +56,6 @@ function check_prerequisites() {
 }
 
 function install() {
-    echo "Gitpod installer version: $(gitpod-installer version | jq -r '.version')"
-
     check_prerequisites
 
     echo "Updating helm repositories..."
@@ -104,7 +95,7 @@ function install() {
         --kubernetes-version "${AKS_VERSION}" \
         --max-count "50" \
         --max-pods "110" \
-        --min-count "3" \
+        --min-count "1" \
         --name "${CLUSTER_NAME}" \
         --node-osdisk-size "100" \
         --node-vm-size "${K8S_NODE_VM_SIZE}" \
@@ -127,7 +118,7 @@ function install() {
         --labels gitpod.io/workload_workspace_services=true gitpod.io/workload_workspace_regular=true gitpod.io/workload_workspace_headless=true \
         --max-count "50" \
         --max-pods "110" \
-        --min-count "3" \
+        --min-count "1" \
         --name "${WORKSPACES_POOL}" \
         --node-osdisk-size "100" \
         --node-vm-size "${K8S_NODE_VM_SIZE}" \
@@ -150,14 +141,7 @@ function install() {
     setup_managed_dns
     setup_mysql_database
     setup_storage
-    install_gitpod
-
-    cat << EOF
-==========================
-Gitpod is now installed on your cluster
-
-Please update your DNS records with the relevant nameserver.
-EOF
+    output_config
 }
 
 function install_cert_manager() {
@@ -174,65 +158,89 @@ function install_cert_manager() {
     --wait \
     cert-manager \
     jetstack/cert-manager
-
-  # ensure cert-manager and CRDs are installed and running
-  kubectl wait --for=condition=available --timeout=300s deployment/cert-manager -n cert-manager
 }
 
-function install_gitpod() {
-  echo "Installing Gitpod..."
+function output_config() {
+  DOCKER_USER=$(az acr credential show \
+    --name "${REGISTRY_NAME}" \
+    --output tsv \
+    --query username \
+    --resource-group "${RESOURCE_GROUP}")
 
-  local CONFIG_FILE="${DIR}/gitpod-config.yaml"
+  DOCKER_REGISTRY_SERVER=$(az acr show \
+    --name "${REGISTRY_NAME}" \
+    --output tsv \
+    --query loginServer \
+    --resource-group "${RESOURCE_GROUP}")
 
-  gitpod-installer init > "${CONFIG_FILE}"
+  DOCKER_PASSWORD=$(az acr credential show \
+    --name "${REGISTRY_NAME}" \
+    --output tsv \
+    --query passwords[0].value \
+    --resource-group "${RESOURCE_GROUP}")
 
-  echo "Updating config..."
+  STORAGE_ACCOUNT_KEY=$(az storage account keys list \
+    --account-name "${STORAGE_ACCOUNT_NAME}" \
+    --resource-group "${RESOURCE_GROUP}" \
+    --output json \
+      | jq -r '.[] | select(.keyName == "key1") | .value')
 
-  yq e -i ".certificate.name = \"${CERT_NAME}\"" "${CONFIG_FILE}"
-  yq e -i ".containerRegistry.inCluster = false" "${CONFIG_FILE}"
-  yq e -i ".containerRegistry.external.url = \"${DOCKER_REGISTRY_SERVER}\"" "${CONFIG_FILE}"
-  yq e -i ".containerRegistry.external.certificate.kind = \"secret\"" "${CONFIG_FILE}"
-  yq e -i ".containerRegistry.external.certificate.name = \"${SECRET_REGISTRY}\"" "${CONFIG_FILE}"
-  yq e -i ".database.inCluster = false" "${CONFIG_FILE}"
-  yq e -i ".database.external.certificate.kind = \"secret\"" "${CONFIG_FILE}"
-  yq e -i ".database.external.certificate.name = \"${SECRET_DATABASE}\"" "${CONFIG_FILE}"
-  yq e -i ".domain = \"${DOMAIN}\"" "${CONFIG_FILE}"
-  yq e -i ".metadata.region = \"${LOCATION}\"" "${CONFIG_FILE}"
-  yq e -i ".objectStorage.inCluster = false" "${CONFIG_FILE}"
-  yq e -i ".objectStorage.azure.credentials.kind = \"secret\"" "${CONFIG_FILE}"
-  yq e -i ".objectStorage.azure.credentials.name = \"${SECRET_STORAGE}\"" "${CONFIG_FILE}"
-  yq e -i '.workspace.runtime.containerdRuntimeDir = "/var/lib/containerd/io.containerd.runtime.v2.task/k8s.io"' "${CONFIG_FILE}"
+  cat << EOF
 
-  gitpod-installer \
-    render \
-    --config="${CONFIG_FILE}" > gitpod.yaml
 
-  # See https://github.com/gitpod-io/gitpod/tree/main/install/installer#error-validating-statefulsetstatus
-  yq eval-all --inplace \
-    'del(select(.kind == "StatefulSet" and .metadata.name == "openvsx-proxy").status)' \
-    gitpod.yaml
+==========================
+🎉🥳🔥🧡🚀
 
-  kubectl apply -f gitpod.yaml
-}
+Your cloud infrastructure is ready to install Gitpod. Please visit
+https://www.gitpod.io/docs/self-hosted/latest/getting-started#step-4-install-gitpod
+for your next steps.
 
-function install_jaeger_operator(){
-  echo "Installing Jaeger operator..."
-  kubectl apply -f https://raw.githubusercontent.com/jaegertracing/helm-charts/main/charts/jaeger-operator/crds/crd.yaml
-  helm upgrade \
-    --atomic \
-    --cleanup-on-fail \
-    --create-namespace \
-    --install \
-    --namespace='jaeger-operator' \
-    --reset-values \
-    --set installCRDs=true \
-    --set crd.install=false \
-    --values "${DIR}/charts/assets/jaeger-values.yaml" \
-    --wait \
-    jaegeroperator \
-    jaegertracing/jaeger-operator
+Passwords may change on subsequents runs of this guide.
 
-  kubectl apply -f "${DIR}/charts/assets/jaeger-gitpod.yaml"
+=================
+Config Parameters
+=================
+
+Domain Name: ${DOMAIN}
+
+Registry
+========
+URL: ${DOCKER_REGISTRY_SERVER}
+Registry Server: <blank>
+Username: ${DOCKER_USER}
+Password: ${DOCKER_PASSWORD}
+
+Database
+========
+Host: ${MYSQL_INSTANCE_NAME}.mysql.database.azure.com
+Username: ${MYSQL_GITPOD_USERNAME}@${MYSQL_INSTANCE_NAME}
+Password: ${MYSQL_GITPOD_PASSWORD}
+Port: 3306
+
+Storage
+=======
+Region: ${LOCATION}
+Account Name: ${STORAGE_ACCOUNT_NAME}
+Access Key: ${STORAGE_ACCOUNT_KEY}
+
+TLS Certificates
+================
+Issuer name: gitpod-issuer
+Issuer type: Cluster issuer
+
+EOF
+
+  if [ -n "${SETUP_MANAGED_DNS}" ] && [ "${SETUP_MANAGED_DNS}" == "true" ]; then
+  cat << EOF
+===========
+DNS Records
+===========
+
+Domain Name: ${DOMAIN}
+Nameserver(s):
+$(az network dns zone show --name ${DOMAIN} --resource-group ${RESOURCE_GROUP} --query "nameServers" -o tsv)
+EOF
+fi
 }
 
 function login() {
@@ -255,32 +263,6 @@ function setup_container_registry() {
       --resource-group "${RESOURCE_GROUP}" \
       --sku Premium
   fi
-
-  DOCKER_USER=$(az acr credential show \
-    --name "${REGISTRY_NAME}" \
-    --output tsv \
-    --query username \
-    --resource-group "${RESOURCE_GROUP}")
-
-  export DOCKER_REGISTRY_SERVER=$(az acr show \
-    --name "${REGISTRY_NAME}" \
-    --output tsv \
-    --query loginServer \
-    --resource-group "${RESOURCE_GROUP}")
-
-  DOCKER_PASSWORD=$(az acr credential show \
-    --name "${REGISTRY_NAME}" \
-    --output tsv \
-    --query passwords[0].value \
-    --resource-group "${RESOURCE_GROUP}")
-
-  echo "Create registry secret..."
-  kubectl create secret docker-registry "${SECRET_REGISTRY}" \
-    --docker-server="${DOCKER_REGISTRY_SERVER}" \
-    --docker-username="${DOCKER_USER}" \
-    --docker-password="${DOCKER_PASSWORD}" \
-    --dry-run=client -o yaml | \
-    kubectl replace --force -f -
 }
 
 function setup_kubectl() {
@@ -315,8 +297,6 @@ function setup_managed_dns() {
       --role "DNS Zone Contributor" \
       --scope "${ZONE_ID}"
 
-    # Use v5.4.8 as external-dns v0.10.x has issue using Azure managed identities not in v0.9.0
-    # @link https://github.com/kubernetes-sigs/external-dns/issues/2383
     helm upgrade \
       --atomic \
       --cleanup-on-fail \
@@ -331,7 +311,6 @@ function setup_managed_dns() {
       --set azure.useManagedIdentityExtension=true \
       --set azure.userAssignedIdentityID="${KUBELET_CLIENT_ID}" \
       --set logFormat=json \
-      --version=5.4.8 \
       --wait \
       external-dns \
       bitnami/external-dns
@@ -343,7 +322,7 @@ function setup_managed_dns() {
 
 function setup_mysql_database() {
   MYSQL_GITPOD_USERNAME="gitpod"
-  MYSQL_GITPOD_PASSWORD=$(openssl rand -base64 20)
+  export MYSQL_GITPOD_PASSWORD=$(openssl rand -base64 20)
 
   if [ "$(az mysql server show --name ${MYSQL_INSTANCE_NAME} --resource-group ${RESOURCE_GROUP} --query "name == '${MYSQL_INSTANCE_NAME}'" || echo "empty")" == "true" ]; then
     echo "MySQL instance exists - updating password..."
@@ -385,16 +364,6 @@ function setup_mysql_database() {
     --resource-group "${RESOURCE_GROUP}" \
     --server-name "${MYSQL_INSTANCE_NAME}" \
     --start-ip-address "0.0.0.0"
-
-  echo "Create database secret..."
-  kubectl create secret generic "${SECRET_DATABASE}" \
-    --from-literal=encryptionKeys="${MYSQL_GITPOD_ENCRYPTION_KEY}" \
-    --from-literal=host="${MYSQL_INSTANCE_NAME}.mysql.database.azure.com" \
-    --from-literal=password="${MYSQL_GITPOD_PASSWORD}" \
-    --from-literal=port="3306" \
-    --from-literal=username="${MYSQL_GITPOD_USERNAME}@${MYSQL_INSTANCE_NAME}" \
-    --dry-run=client -o yaml | \
-    kubectl replace --force -f -
 }
 
 function setup_storage() {
@@ -423,19 +392,6 @@ function setup_storage() {
     --assignee "${PRINCIPAL_ID}" \
     --role "Storage Blob Data Contributor" \
     --scope "${STORAGE_ACCOUNT_ID}"
-
-  STORAGE_ACCOUNT_KEY=$(az storage account keys list \
-      --account-name "${STORAGE_ACCOUNT_NAME}" \
-      --resource-group "${RESOURCE_GROUP}" \
-      --output json \
-        | jq -r '.[] | select(.keyName == "key1") | .value')
-
-  echo "Create storage secret..."
-  kubectl create secret generic "${SECRET_STORAGE}" \
-      --from-literal=accountName="${STORAGE_ACCOUNT_NAME}" \
-      --from-literal=accountKey="${STORAGE_ACCOUNT_KEY}" \
-      --dry-run=client -o yaml | \
-      kubectl replace --force -f -
 }
 
 function uninstall() {

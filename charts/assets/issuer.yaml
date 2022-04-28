@@ -15,17 +15,3 @@ spec:
             subscriptionID: $AZURE_SUBSCRIPTION_ID
             resourceGroupName: $RESOURCE_GROUP
             hostedZoneName: $DOMAIN
----
-apiVersion: cert-manager.io/v1
-kind: Certificate
-metadata:
-  name: $CERT_NAME
-spec:
-  secretName: $CERT_NAME
-  issuerRef:
-    name: gitpod-issuer
-    kind: ClusterIssuer
-  dnsNames:
-    - $DOMAIN
-    - "*.$DOMAIN"
-    - "*.ws.$DOMAIN"

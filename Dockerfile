@@ -4,7 +4,6 @@ RUN apk add --no-cache \
   gettext \
   jq
 
-ARG GITPOD_VERSION="2022.03.1"
 ARG HELM_VERSION=v3.6.3
 
 RUN curl -fsSL "https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl" -o /usr/local/bin/kubectl \
@@ -17,9 +16,6 @@ RUN mkdir -p /tmp/helm/ \
 
 RUN curl -fsSL https://github.com/mikefarah/yq/releases/download/v4.12.2/yq_linux_amd64 -o /usr/local/bin/yq \
   && chmod +x /usr/local/bin/yq
-
-RUN curl -fsSL https://github.com/gitpod-io/gitpod/releases/download/${GITPOD_VERSION}/gitpod-installer-linux-amd64 -o /usr/local/bin/gitpod-installer \
-  && chmod +x /usr/local/bin/gitpod-installer
 
 WORKDIR /gitpod
 
