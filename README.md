@@ -1,7 +1,6 @@
 # Running Gitpod in [Azure AKS](https://azure.microsoft.com/en-gb/services/kubernetes-service/)
 
-> **IMPORTANT** This guide exists as a simple and reliable way of creating a Gitpod instance in Azure AKS. It
-> is not designed to cater for every situation. If you find that it does not meet your exact needs,
+> **IMPORTANT** This guide exists as a simple and reliable way of creating an environment in AKS that can run Gitpod. It is not designed to cater for every situation. If you find that it does not meet your exact needs,
 > please fork this guide and amend it to your own needs.
 
 Before starting the installation process, you need:
@@ -28,7 +27,7 @@ To sign in, use a web browser to open the page https://microsoft.com/devicelogin
 make install
 ```
 
-The whole process takes around twenty minutes. In the end, the following resources are created:
+The whole process takes around twenty minutes. In the end, the following resources are created. These are the Azure versions of the [components Gitpod requires](https://www.gitpod.io/docs/self-hosted/latest/required-components):
 
 - an AKS cluster running Kubernetes v1.21.
 - Azure load balancer.
@@ -39,15 +38,14 @@ The whole process takes around twenty minutes. In the end, the following resourc
 - [calico](https://docs.projectcalico.org) as CNI and NetworkPolicy implementation.
 - [cert-manager](https://cert-manager.io/) for self-signed SSL certificates.
 
-Upon completion, it will print the config for resource (including passwords) and instructions on what 
-to do next. **IMPORTANT** - running the `make install` command after the initial install will change 
+Upon completion, it will print the config for the resources created (including passwords) and instructions on what to do next. **IMPORTANT** - running the `make install` command after the initial install will change 
 your database password which will require you to update your KOTS configuration.
 
 ## DNS records
 
 > This setup will work even if the parent domain is not owned by a DNS zone in the Azure portal.
 
-The recommended setup is to have `SETUP_MANAGED_DNS` to be `true` which will create an
+The recommended setup is to have `SETUP_MANAGED_DNS` be `true` which will create an
 [Azure DNS zone](https://docs.microsoft.com/en-us/azure/dns/dns-zones-records) for your
 domain. When the zone is created, you will see various nameserver records (with type `NS`), such
 as `ns1-xx.azure-dns.com`, `ns2-xx.azure-dns.net`, `ns3-xx.azure-dns.org` and `ns4-xx.azure-dns.info`
@@ -59,7 +57,7 @@ This is what it would look like if your parent domain was using Cloudflare.
 
 ![Cloudflare DNS manager](./images/dns-record.png "Cloudflare DNS manager")
 
-Once applied, please allow a few minutes to for DNS propagation.
+Once applied, please allow a few minutes for DNS propagation.
 
 ### Common errors running make install
 
@@ -78,7 +76,7 @@ Once applied, please allow a few minutes to for DNS propagation.
   proxy-5998488f4c-t8vkh   0/1     Init 0/1  0          5m
   ```
 
-  The most likely reason is because the [DNS01 challenge](https://cert-manager.io/docs/configuration/acme/dns01/) has yet to resolve. If using `SETUP_MANAGED_DNS`, you will need to update your DNS records to point to the Azure DNS zone nameserver.
+  The most likely reason is that the [DNS01 challenge](https://cert-manager.io/docs/configuration/acme/dns01/) has yet to resolve. If using `SETUP_MANAGED_DNS`, you will need to update your DNS records to point to the Azure DNS zone nameserver.
 
   Once the DNS record has been updated, you will need to delete all cert-manager pods to retrigger the certificate request
 
@@ -94,54 +92,6 @@ Once applied, please allow a few minutes to for DNS propagation.
   https-certificates          True    https-certificates          5m
   ```
 
-## Verify the installation
-
-First, check that Gitpod components are running.
-
-```shell
-kubectl get pods
-NAME                                      READY   STATUS    RESTARTS   AGE
-agent-smith-c9v58                         2/2     Running   0          7m35s
-agent-smith-j7b85                         2/2     Running   0          7m35s
-agent-smith-mwf5d                         2/2     Running   0          7m35s
-blobserve-84f895c88c-476m2                2/2     Running   0          7m33s
-content-service-57c7fdb84d-dl49k          1/1     Running   0          7m34s
-dashboard-b79d84d47-z7hzg                 1/1     Running   0          7m34s
-image-builder-mk3-5ff7c68bb4-qqbw5        2/2     Running   0          7m34s
-jaeger-operator-777d987c8b-ts9gw          1/1     Running   0          7m33s
-messagebus-0                              1/1     Running   0          7m34s
-minio-697975c744-swwp6                    1/1     Running   0          7m34s
-minio-697975c744-tj96r                    1/1     Running   0          7m34s
-openvsx-proxy-0                           1/1     Running   0          7m34s
-proxy-c58846cf5-cbdgb                     2/2     Running   0          7m33s
-registry-facade-84sgf                     2/2     Running   0          7m34s
-registry-facade-n6kc9                     2/2     Running   0          7m35s
-registry-facade-zt7qt                     2/2     Running   0          7m34s
-server-689b886647-dkd5h                   2/2     Running   0          7m34s
-ws-48fe6d74-6e6d-4e3e-a6a4-1bf160b4ed3d   1/1     Running   0          2m43s
-ws-daemon-v8284                           2/2     Running   0          7m35s
-ws-daemon-vs59b                           2/2     Running   0          7m35s
-ws-daemon-w6gmj                           2/2     Running   0          7m35s
-ws-manager-54c8f9995f-lrrkx               1/1     Running   0          7m34s
-ws-manager-bridge-8648cd6b69-nqxnh        2/2     Running   0          7m34s
-ws-proxy-574f9dcbcc-qrn5m                 1/1     Running   0          7m33s
-ws-scheduler-84d99cbbbb-5p86k             2/2     Running   0          7m34s
-```
-
-### Test Gitpod workspaces
-
-When the provisioning and configuration of the cluster is done, the script shows the URL of the load balancer,
-like:
-
-Please open the URL `https://<domain>/workspaces`.
-It should display the Gitpod login page similar to the next image.
-
-*DNS propagation* can take several minutes.
-
-![Gitpod login page](./images/gitpod-login.png "Gitpod Login Page")
-
-----
-
 ## Destroy the cluster and Azure resources
 
 Remove the Azure cluster running:
@@ -150,7 +100,7 @@ Remove the Azure cluster running:
 make uninstall
 ```
 
-> The command asks for a confirmation:
+> The command asks for confirmation:
 > `Are you sure you want to delete: Gitpod (y/n)?`
 
 This will destroy the Kubernetes cluster and allow you to manually delete the cloud storage.
