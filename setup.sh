@@ -17,6 +17,7 @@ SERVICES_POOL="services"
 WORKSPACES_POOL="workspaces"
 
 K8S_NODE_VM_SIZE=${K8S_NODE_VM_SIZE:="Standard_D4_v3"}
+BACKUP_SP_NAME="velero"
 
 function check_prerequisites() {
     if [ -z "${AZURE_SUBSCRIPTION_ID}" ]; then
@@ -123,7 +124,7 @@ function install() {
         --node-osdisk-size "100" \
         --node-vm-size "${K8S_NODE_VM_SIZE}" \
         --resource-group "${RESOURCE_GROUP}"
-      fi
+    fi
 
     setup_kubectl
 
@@ -141,6 +142,7 @@ function install() {
     setup_managed_dns
     setup_mysql_database
     setup_storage
+    setup_backup
     output_config
 }
 
@@ -366,6 +368,82 @@ function setup_mysql_database() {
     --start-ip-address "0.0.0.0"
 }
 
+function setup_backup() {
+  if [ -n "${BACKUPS_ENABLED}" ] && [ "${BACKUPS_ENABLED}" == "true" ]; then
+    BACKUP_RESOURCE_GROUP="$(az aks show --name gitpod -g gitpod --query "nodeResourceGroup" -o tsv)"
+
+    echo "Configuring backups in ${BACKUP_RESOURCE_GROUP}..."
+
+    # Based from https://github.com/vmware-tanzu/velero-plugin-for-microsoft-azure#setup
+    BACKUP_ACCOUNT="${STORAGE_ACCOUNT_NAME}backup"
+    if [ "$(az storage account show --name ${BACKUP_ACCOUNT} --resource-group ${BACKUP_RESOURCE_GROUP} --query "name == '${BACKUP_ACCOUNT}'" || echo "empty")" == "true" ]; then
+      echo "Backup storage account exists..."
+    else
+      echo "Create backup storage account..."
+      az storage account create \
+        --name "${STORAGE_ACCOUNT_NAME}backup" \
+        --resource-group "${BACKUP_RESOURCE_GROUP}" \
+        --location "${LOCATION}" \
+        --sku Standard_GRS \
+        --encryption-services blob \
+        --https-only true \
+        --kind BlobStorage \
+        --access-tier Hot
+    fi
+
+    ACCOUNT_KEY="$(az storage account keys list --resource-group "${BACKUP_RESOURCE_GROUP}" --account-name "${BACKUP_ACCOUNT}" --query "[0].value" -o tsv)"
+
+    BLOB_CONTAINER="velero"
+    if [ "$(az storage container show --account-name ${BACKUP_ACCOUNT} --name ${BLOB_CONTAINER} --account-key="${ACCOUNT_KEY}" --query "name == '${BLOB_CONTAINER}'" || echo "empty")" == "true" ]; then
+      echo "Backup storage container exists..."
+    else
+      echo "Create backup storage container..."
+      az storage container create \
+        -n "${BLOB_CONTAINER}" \
+        --account-key="${ACCOUNT_KEY}" \
+        --public-access off \
+        --account-name "${BACKUP_ACCOUNT}"
+    fi
+
+    echo "Create service principal for Velero"
+    AZURE_ROLE="Contributor"
+
+    # Delete each time
+    az ad sp delete --id $(az ad sp list --display-name "${BACKUP_SP_NAME}" --query "[].id" -o tsv) || true
+
+    AZURE_CLIENT_SECRET=$(az ad sp create-for-rbac \
+      --display-name "${BACKUP_SP_NAME}" \
+      --role "${AZURE_ROLE}" \
+      --scopes /subscriptions/27ef008d-9475-4fe2-ac63-d15da9362546 \
+      --query "password" \
+      -o tsv)
+
+    AZURE_CLIENT_ID=$(az ad sp list --display-name "${BACKUP_SP_NAME}" --query '[0].appId' -o tsv)
+
+    cat << EOF  > ./credentials-velero
+AZURE_SUBSCRIPTION_ID=${AZURE_SUBSCRIPTION_ID}
+AZURE_TENANT_ID=${AZURE_TENANT_ID}
+AZURE_CLIENT_ID=${AZURE_CLIENT_ID}
+AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET}
+AZURE_RESOURCE_GROUP=${BACKUP_RESOURCE_GROUP}
+AZURE_CLOUD_NAME=AzurePublicCloud
+EOF
+
+    # Delete to force update to new values
+    velero uninstall --force
+
+    velero install \
+      --provider azure \
+      --plugins velero/velero-plugin-for-microsoft-azure:v1.4.0 \
+      --bucket "${BLOB_CONTAINER}" \
+      --secret-file ./credentials-velero \
+      --backup-location-config "resourceGroup=${BACKUP_RESOURCE_GROUP},storageAccount=${BACKUP_ACCOUNT},subscriptionId=${AZURE_SUBSCRIPTION_ID}" \
+      --snapshot-location-config "apiTimeout=2m" \
+      --use-restic \
+      --wait
+  fi
+}
+
 function setup_storage() {
   if [ "$(az storage account show --name ${STORAGE_ACCOUNT_NAME} --resource-group ${RESOURCE_GROUP} --query "name == '${STORAGE_ACCOUNT_NAME}'" || echo "empty")" == "true" ]; then
     echo "Storage account exists..."
@@ -397,7 +475,7 @@ function setup_storage() {
 function uninstall() {
   check_prerequisites
 
-  read -p "Are you sure you want to delete: Gitpod (y/n)? " -n 1 -r
+  read -p "Are you sure you want to delete: Gitpod (y/N)? " -n 1 -r
   if [[ $REPLY =~ ^[Yy]$ ]]; then
     set +e
 
@@ -417,6 +495,11 @@ function uninstall() {
       --name "${CLUSTER_NAME}" \
       --resource-group "${RESOURCE_GROUP}" \
       --yes
+
+    if [ -n "${BACKUPS_ENABLED}" ] && [ "${BACKUPS_ENABLED}" == "true" ]; then
+      echo "Deleting backup service principal"
+      az ad sp delete --id $(az ad sp list --display-name "${BACKUP_SP_NAME}" --query "[].id" -o tsv) || true
+    fi
 
     printf "\n%s\n" "Please make sure to delete the resource group ${RESOURCE_GROUP} and services:"
     printf "%s\n" "- https://portal.azure.com/#resource/subscriptions/${AZURE_SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP}/overview"

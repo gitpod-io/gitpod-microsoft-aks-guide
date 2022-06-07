@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/azure-cli:2.9.1
+FROM mcr.microsoft.com/azure-cli:2.37.0
 
 RUN apk add --no-cache \
   gettext \
@@ -16,6 +16,8 @@ RUN mkdir -p /tmp/helm/ \
 
 RUN curl -fsSL https://github.com/mikefarah/yq/releases/download/v4.12.2/yq_linux_amd64 -o /usr/local/bin/yq \
   && chmod +x /usr/local/bin/yq
+
+COPY --from=velero/velero:v1.8.1 /velero /usr/bin/velero
 
 WORKDIR /gitpod
 
