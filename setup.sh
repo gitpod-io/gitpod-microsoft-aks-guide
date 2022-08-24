@@ -83,7 +83,7 @@ function install() {
         echo "Finding Kubernetes version"
         AKS_VERSION=$(az aks get-versions \
           --location northeurope \
-          --query "orchestrators[?contains(orchestratorVersion, '1.21.')].orchestratorVersion" \
+          --query "orchestrators[?contains(orchestratorVersion, '1.24.')].orchestratorVersion" \
           -o json | jq -r '.[-1]')
       fi
 
